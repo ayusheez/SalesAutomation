@@ -85,12 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     console.log("🚀 AuthProvider useEffect starting...");
 
-    // Safety timeout - if auth doesn't resolve in 10 seconds, stop loading
-    const safetyTimeout = setTimeout(() => {
-      console.log("⏱️ Safety timeout triggered - forcing isLoading to false");
-      setIsLoading(false);
-    }, 10000);
-
     // Check for existing session on mount
     const initializeAuth = async () => {
       console.log("🔐 Initializing auth...");
@@ -146,7 +140,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (event === "SIGNED_IN" && session?.user) {
-        console.log("✅ User signed in, fetching profile...");
+        console.log("✅ User signed in");
+
+        setIsAuthenticated(true); // <-- REQUIRED
+        setUser(session.user); // <-- REQUIRED
+
         const userProfile = await fetchUserProfile(session.user.id);
         console.log("📦 Profile fetch result:", { hasProfile: !!userProfile });
         if (userProfile) {
@@ -182,7 +180,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     return () => {
       console.log("🧹 Cleaning up auth listener");
-      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
   }, []);
@@ -341,6 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         user,
         isAuthenticated,
         isLoading,
+        setIsLoading,
         login,
         signup,
         logout,

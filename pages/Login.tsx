@@ -14,11 +14,10 @@ import {
   Chrome,
   User,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, signup, isAuthenticated } = useAuth();
+  const { login, signup, isAuthenticated, isLoading, setIsLoading } = useAuth();
   const { addToast } = useToast();
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -26,40 +25,33 @@ export const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   // Animation state
   const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    console.log("🔍 Login page - isAuthenticated:", isAuthenticated);
     if (isAuthenticated) {
-      navigate("/");
+      console.log("✅ User is authenticated, redirecting to /");
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, navigate]);
-  useEffect(() => {
-    // Handle the redirect after email confirmation
-    const handleEmailConfirmation = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-      if (session && !error) {
-        navigate("/");
-      }
-    };
-
-    handleEmailConfirmation();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("🚀 Form submitted");
     setIsLoading(true);
     setError("");
 
     try {
       let success = false;
       if (isSignUp) {
+        console.log("📝 Attempting signup...");
         if (!name.trim()) {
           setError("Please enter your name.");
           setIsLoading(false);
@@ -71,6 +63,7 @@ export const Login: React.FC = () => {
           return;
         }
         success = await signup(name, email, password);
+        console.log("📝 Signup result:", success);
         if (success) {
           addToast(
             "Account created! Please check your email to verify.",
@@ -78,15 +71,21 @@ export const Login: React.FC = () => {
           );
         }
       } else {
+        console.log("🔑 Attempting login...");
         success = await login(email, password);
+        console.log("🔑 Login result:", success);
         if (success) {
           addToast("Welcome back!", "success");
+          console.log("✅ Login successful, navigating to /");
+          // Force navigation after successful login
+          setTimeout(() => {
+            navigate("/", { replace: true });
+          }, 100);
         }
       }
 
-      if (success) {
-        navigate("/dashboard");
-      } else {
+      if (!success) {
+        console.log("❌ Auth failed");
         setError(
           isSignUp
             ? "Failed to create account. Email may already be registered."
@@ -94,7 +93,7 @@ export const Login: React.FC = () => {
         );
       }
     } catch (err: any) {
-      console.error("Auth error:", err);
+      console.error("❌ Auth error:", err);
       setError(
         err?.message || "An unexpected error occurred. Please try again."
       );
@@ -384,6 +383,7 @@ export const Login: React.FC = () => {
             )}
 
             <Button
+              type="submit"
               className="w-full h-12 text-base font-bold shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300"
               disabled={isLoading}
             >
