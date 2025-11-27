@@ -240,18 +240,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       if (data.user) {
-        console.log("✅ User created in auth, creating profile...");
-        const { error: insertError } = await supabase.from("users").insert({
-          auth_id: data.user.id,
-          name,
-          email,
-          role: "USER",
-        });
+        console.log("✅ User created in auth");
 
-        if (insertError) {
-          console.error("❌ Error creating user profile:", insertError);
-          return false;
-        }
+        // The database trigger will automatically create the profile
+        // Just wait a moment for it to complete
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         if (data.session) {
           console.log("✅ User immediately signed in (no confirmation needed)");
