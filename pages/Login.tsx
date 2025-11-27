@@ -17,7 +17,7 @@ import {
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, signup, isAuthenticated, isLoading, setIsLoading } = useAuth();
+  const { login, signup, isAuthenticated, isLoading } = useAuth();
   const { addToast } = useToast();
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -45,7 +45,6 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("🚀 Form submitted");
-    setIsLoading(true);
     setError("");
 
     try {
@@ -54,12 +53,10 @@ export const Login: React.FC = () => {
         console.log("📝 Attempting signup...");
         if (!name.trim()) {
           setError("Please enter your name.");
-          setIsLoading(false);
           return;
         }
         if (password.length < 6) {
           setError("Password must be at least 6 characters long.");
-          setIsLoading(false);
           return;
         }
         success = await signup(name, email, password);
@@ -97,8 +94,6 @@ export const Login: React.FC = () => {
       setError(
         err?.message || "An unexpected error occurred. Please try again."
       );
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -40,16 +40,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     console.log("🔍 Fetching user profile for:", authUserId);
     try {
       console.log("📊 Starting database query...");
-      const { data, error } = await supabase
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Profile fetch timeout")), 5000)
+      );
+
+      const queryPromise = supabase
         .from("users")
         .select("*")
         .eq("auth_id", authUserId)
         .single();
 
-      console.log("📊 Database query complete:", { hasData: !!data, error });
+      const { data, error } = (await Promise.race([
+        queryPromise,
+        timeoutPromise,
+      ])) as any;
+
+      console.log("📊 Database query complete:", {
+        hasData: !!data,
+        error: error?.message || error,
+        errorCode: error?.code,
+        errorDetails: error?.details,
+      });
 
       if (error) {
-        console.error("❌ Error fetching user profile:", error);
+        console.error("❌ Error fetching user profile:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
         return null;
       }
 
@@ -76,8 +97,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       console.log("⚠️ No user data returned");
       return null;
-    } catch (error) {
-      console.error("❌ Exception fetching user profile:", error);
+    } catch (error: any) {
+      console.error("❌ Exception fetching user profile:", {
+        message: error?.message,
+        stack: error?.stack,
+      });
       return null;
     }
   };
@@ -142,20 +166,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (event === "SIGNED_IN" && session?.user) {
         console.log("✅ User signed in");
 
-        setIsAuthenticated(true); // <-- REQUIRED
-        setUser(session.user); // <-- REQUIRED
+        try {
+          const userProfile = await fetchUserProfile(session.user.id);
+          console.log("📦 Profile fetch result:", {
+            hasProfile: !!userProfile,
+          });
 
-        const userProfile = await fetchUserProfile(session.user.id);
-        console.log("📦 Profile fetch result:", { hasProfile: !!userProfile });
-        if (userProfile) {
-          console.log("✅ Setting user state and authenticated");
-          setUser(userProfile);
-          setIsAuthenticated(true);
-        } else {
-          console.log("❌ No profile returned, user not authenticated");
+          if (userProfile) {
+            console.log("✅ Setting user state and authenticated");
+            setUser(userProfile);
+            setIsAuthenticated(true);
+          } else {
+            console.log("❌ No profile returned, user not authenticated");
+            setUser(null);
+            setIsAuthenticated(false);
+          }
+        } catch (error) {
+          console.error("❌ Error in SIGNED_IN handler:", error);
+          setUser(null);
+          setIsAuthenticated(false);
+        } finally {
+          console.log("🏁 Setting isLoading to false after SIGNED_IN");
+          setIsLoading(false);
         }
-        console.log("🏁 Setting isLoading to false after SIGNED_IN");
-        setIsLoading(false);
       } else if (event === "SIGNED_OUT") {
         console.log("👋 User signed out");
         setUser(null);
@@ -186,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const login = async (email: string, password: string): Promise<boolean> => {
     console.log("🔑 Login attempt for:", email);
+    setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -194,6 +228,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (error) {
         console.error("❌ Login error:", error.message);
+        setIsLoading(false);
         return false;
       }
 
@@ -203,16 +238,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         if (userProfile) {
           setUser(userProfile);
           setIsAuthenticated(true);
+          setIsLoading(false);
           return true;
         } else {
           console.error("❌ User profile not found after login");
+          setIsLoading(false);
           return false;
         }
       }
 
+      setIsLoading(false);
       return false;
     } catch (error: any) {
       console.error("❌ Login exception:", error.message);
+      setIsLoading(false);
       return false;
     }
   };
@@ -223,6 +262,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     password: string
   ): Promise<boolean> => {
     console.log("📝 Signup attempt for:", email);
+    setIsLoading(true);
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -236,15 +277,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (error) {
         console.error("❌ Signup error:", error.message);
+        setIsLoading(false);
         return false;
       }
 
       if (data.user) {
-        console.log("✅ User created in auth");
+        console.log("✅ User created in auth (profile created by trigger)");
 
-        // The database trigger will automatically create the profile
-        // Just wait a moment for it to complete
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait a moment for the database trigger to complete
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         if (data.session) {
           console.log("✅ User immediately signed in (no confirmation needed)");
@@ -252,17 +293,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           if (userProfile) {
             setUser(userProfile);
             setIsAuthenticated(true);
+            setIsLoading(false);
+            return true;
+          } else {
+            console.log("⚠️ Profile not found yet, but signup successful");
+            setIsLoading(false);
             return true;
           }
         } else {
-          console.log("📧 Email confirmation required");
+          console.log("📧 Email confirmation required - signup successful");
+          setIsLoading(false);
           return true;
         }
       }
 
+      setIsLoading(false);
       return false;
     } catch (error: any) {
       console.error("❌ Signup exception:", error.message);
+      setIsLoading(false);
       return false;
     }
   };
@@ -272,7 +321,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-
       setUser(null);
       setIsAuthenticated(false);
     } catch (error) {
@@ -331,7 +379,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         user,
         isAuthenticated,
         isLoading,
-        setIsLoading,
         login,
         signup,
         logout,
